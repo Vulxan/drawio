@@ -50,6 +50,8 @@
 					result[params[i].substring(0, idx)] = params[i].substring(idx + 1);
 				}
 			}
+
+			result['offline'] = '1';
 			
 			return result;
 		})();
