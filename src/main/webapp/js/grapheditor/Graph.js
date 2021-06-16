@@ -2162,7 +2162,7 @@ Graph.prototype.init = function(container)
 	Graph.prototype.isFastZoomEnabled = function()
 	{
 		return urlParams['zoom'] != 'nocss' && !mxClient.NO_FO && !mxClient.IS_EDGE &&
-			!this.useCssTransforms && this.isCssTransformsSupported();
+			!this.useCssTransforms && (this.isCssTransformsSupported() || mxClient.IS_IOS);
 	};
 
 	/**
@@ -8620,7 +8620,7 @@ if (typeof mxVertexHandler != 'undefined')
 			    	{
 			    		linkNode = linkNode.parentNode;
 			    	}
-			    	
+
 			    	// Ignores clicks on links and collapse/expand icon
 			    	if (linkNode == null &&
 			    		(((Math.abs(this.scrollLeft - graph.container.scrollLeft) < tol &&
