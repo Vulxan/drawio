@@ -1,3 +1,42 @@
+02-JUL-2021: 14.8.4
+
+- Fixes drag and drop for edge labels with selected parents
+- [conf cloud] Fixes recent and search in embed diagrams
+
+30-JUN-2021: 14.8.3
+
+- [conf cloud] Fixes save settings with current viewer status
+- Adds function for image export in viewer
+- Fixes possible NPE https://github.com/jgraph/drawio/issues/2115
+
+
+25-JUN-2021: 14.8.2
+
+- [conf cloud] Adds lightbox to simple viewer
+- [conf+jira cloud] Fixes export downloads https://github.com/jgraph/drawio/issues/2107
+- [conf cloud] Updates self import to support data:confluence/id and links
+
+24-JUN-2021: 14.8.1
+
+- Clones existing SVG for outline rendering
+- Fixes possible ignored gesture end in outline
+- Fixes unconnected edges z-index order in vsdx import
+- Fixes line jump handling in vsdx import
+- Improves locking https://github.com/jgraph/drawio/issues/2069
+- Fixes action states and cursors for locked cells
+- Fixes selection in locked layers
+- Updates French translations
+
+17-JUN-2021: 14.8.0
+
+- Adds bringForward and sendBackward actions
+- Fixes GraphViewer toolbar and border hiding in FF
+
+16-JUN-2021: 14.7.10
+
+- [jira cloud] Adds support for uploading zipped format diagrams
+- Fixes ignored locked layers, hover icons, shape picker clipping
+
 15-JUN-2021: 14.7.9
 
 - Adds minimize to shape picker in sketch theme
@@ -8,7 +47,7 @@
 - [conf cloud] Adds custom templates to sketch macro add template dialog
 - [conf cloud] Fixes minor issues with templates dialog
 - Prevents showing an empty viewer when configured layers are incorrect
-- [conf cloud] Fixes template/new dialog bugs and added no file type option
+- [conf cloud] Fixes template and new dialog bugs and added no file type option
 - [conf cloud] Fixes Link dialog attachment links
 - [conf cloud] Fixes centering with hidden toolbar or simple viewer
 - Adds preview button in templates dialog

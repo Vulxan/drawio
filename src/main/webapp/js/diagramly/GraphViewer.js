@@ -21,7 +21,7 @@ GraphViewer.prototype.editBlankUrl = 'https://app.diagrams.net/';
 /**
  * Base URL for relative images.
  */
-GraphViewer.prototype.imageBaseUrl = 'https://app.diagrams.net/';
+GraphViewer.prototype.imageBaseUrl = 'https://viewer.diagrams.net/';
 
 /**
  * Redirects editing to absolue URLs.
@@ -1413,7 +1413,7 @@ GraphViewer.prototype.addToolbar = function()
 				hideToolbar();
 			});
 			
-			mxEvent.addListener(document, 'mouseleave', function(evt)
+			mxEvent.addListener(document.body, 'mouseleave', function(evt)
 			{
 				hideToolbar();
 			});
