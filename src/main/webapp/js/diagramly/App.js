@@ -265,7 +265,6 @@ App.DROPINS_URL = 'https://www.dropbox.com/static/api/2/dropins.js';
  * But it doesn't work for IE11, so we fallback to the original one
  */
 App.ONEDRIVE_URL = mxClient.IS_IE11? 'https://js.live.net/v7.2/OneDrive.js' : window.DRAWIO_BASE_URL + '/js/onedrive/OneDrive.js';
-App.ONEDRIVE_INLINE_PICKER_URL = window.DRAWIO_BASE_URL + '/js/onedrive/mxODPicker.js';
 
 /**
  * Trello URL
@@ -275,7 +274,7 @@ App.TRELLO_URL = 'https://api.trello.com/1/client.js';
 /**
  * Trello JQuery dependency
  */
-App.TRELLO_JQUERY_URL = 'https://code.jquery.com/jquery-1.7.1.min.js';
+App.TRELLO_JQUERY_URL = 'https://code.jquery.com/jquery-3.3.1.min.js';
 
 /**
  * Specifies the key for the pusher project.
@@ -517,16 +516,13 @@ App.getStoredMode = function()
 						if (App.mode == App.MODE_ONEDRIVE || (window.location.hash != null &&
 							window.location.hash.substring(0, 2) == '#W'))
 						{
-							if (urlParams['inlinePicker'] == '1' || mxClient.IS_ANDROID || mxClient.IS_IOS)
+							if (urlParams['inlinePicker'] == '0')
 							{
-								mxscript(App.ONEDRIVE_INLINE_PICKER_URL, function()
-								{
-									window.OneDrive = {}; //Needed to allow code that check its existance to work BUT it's not used 
-								});
+								mxscript(App.ONEDRIVE_URL);
 							}
 							else
 							{
-								mxscript(App.ONEDRIVE_URL);
+								window.OneDrive = {}; //Needed to allow code that check its existance to work BUT it's not used 
 							}
 						}
 						else if (urlParams['chrome'] == '0')
@@ -958,17 +954,14 @@ App.main = function(callback, createUi)
 						urlParams['od'] == '1')) && (navigator.userAgent == null ||
 						navigator.userAgent.indexOf('MSIE') < 0 || document.documentMode >= 10))))
 					{
-						if (urlParams['inlinePicker'] == '1' || mxClient.IS_ANDROID || mxClient.IS_IOS)
+						if (urlParams['inlinePicker'] == '0')
 						{
-							mxscript(App.ONEDRIVE_INLINE_PICKER_URL, function()
-							{
-								window.OneDrive = {}; //Needed to allow code that check its existance to work BUT it's not used 
-								window.DrawOneDriveClientCallback();
-							});
+							mxscript(App.ONEDRIVE_URL, window.DrawOneDriveClientCallback);
 						}
 						else
 						{
-							mxscript(App.ONEDRIVE_URL, window.DrawOneDriveClientCallback);
+							window.OneDrive = {}; //Needed to allow code that check its existance to work BUT it's not used 
+							window.DrawOneDriveClientCallback();
 						}
 					}
 					// Disables client
@@ -1735,8 +1728,7 @@ App.prototype.init = function()
 					
 					var status = mxUtils.htmlEntities(mxResources.get('timeout'));
 					this.editor.setStatus('<div title="'+ status +
-						'" class="geStatusAlert" style="overflow:hidden;">' + status +
-						'</div>');
+						'" class="geStatusAlert">' + status + '</div>');
 				}
 				
 				EditorUi.logEvent({category: 'TIMEOUT-CACHE-CHECK', action: 'timeout', label: 408});
@@ -2092,29 +2084,26 @@ App.prototype.showRatingBanner = function()
 };
 
 /**
- * 
+ * Checks license in the case of Google Drive storage.
+ * IMPORTANT: Do not change this function without consulting 
+ * the privacy lead. No personal information must be sent.
  */
 App.prototype.checkLicense = function()
 {
 	var driveUser = this.drive.getUser();
-	var email = ((urlParams['dev'] == '1') ? urlParams['lic'] : null) ||
-		((driveUser != null) ? driveUser.email : null);
+	var email = (driveUser != null) ? driveUser.email : null;
 	
-	if (!this.isOffline() && !this.editor.chromeless && email != null)
+	if (!this.isOffline() && !this.editor.chromeless && email != null && driveUser.id != null)
 	{
-		// Anonymises the local part of the email address
+		// Only the domain and hashed user ID are transmitted. This code was reviewed and deemed
+		// compliant by dbenson 2021-09-01.
 		var at = email.lastIndexOf('@');
-		var domain = email;
+		var domain = (at >= 0) ? email.substring(at + 1) : '';
+		var userId = Editor.crc32(driveUser.id);
 		
-		if (at >= 0)
-		{
-			domain = email.substring(at + 1);
-			email = Editor.crc32(email.substring(0, at)) + '@' + domain;
-		}
-
 		// Timestamp is workaround for cached response in certain environments
-		mxUtils.post('/license', 'domain=' + encodeURIComponent(domain) + '&email=' + encodeURIComponent(email) + 
-				'&lc=' + encodeURIComponent(driveUser.locale) + '&ts=' + new Date().getTime(),
+		mxUtils.post('/license', 'domain=' + encodeURIComponent(domain) + '&id=' + encodeURIComponent(userId) + 
+				'&ts=' + new Date().getTime(),
 			mxUtils.bind(this, function(req)
 			{
 				try
@@ -2357,7 +2346,8 @@ App.prototype.getThumbnail = function(width, fn)
 		}
 		
 		var graph = this.editor.graph;
-		
+		var bgImg = graph.backgroundImage;
+
 		// Exports PNG for first page while other page is visible by creating a graph
 		// LATER: Add caching for the graph or SVG while not on first page
 		// To avoid refresh during save dark theme uses separate graph instance
@@ -2366,9 +2356,21 @@ App.prototype.getThumbnail = function(width, fn)
 		if (this.pages != null && (darkTheme || this.currentPage != this.pages[0]))
 		{
 			var graphGetGlobalVariable = graph.getGlobalVariable;
-			graph = this.createTemporaryGraph((darkTheme) ? graph.getDefaultStylesheet() : graph.getStylesheet());
+			graph = this.createTemporaryGraph((darkTheme) ?
+				graph.getDefaultStylesheet() : graph.getStylesheet());
+			graph.setBackgroundImage = this.editor.graph.setBackgroundImage;
 			var page = this.pages[0];
-			
+
+			if (this.currentPage == page)
+			{
+				graph.setBackgroundImage(bgImg);
+			}
+			else if (page.viewState != null && page.viewState != null)
+			{
+				bgImg = page.viewState.backgroundImage;
+				graph.setBackgroundImage(bgImg);
+			}
+
 			// Avoids override of stylesheet in getSvg for dark mode
 			if (darkTheme)
 			{
@@ -2417,7 +2419,8 @@ App.prototype.getThumbnail = function(width, fn)
 		   	{
 		   		// Continues with null in error case
 		   		success();
-		   	}, null, null, null, null, null, null, graph);
+		   	}, null, null, null, null, null, null, graph, null, null, null,
+			   null, 'diagram', null);
 		   	
 		   	result = true;
 		}
@@ -2425,8 +2428,18 @@ App.prototype.getThumbnail = function(width, fn)
 		{
 			var canvas = document.createElement('canvas');
 			var bounds = graph.getGraphBounds();
+			var t = graph.view.translate;
+			var s = graph.view.scale;
+
+			if (bgImg != null)
+			{
+				bounds.add(new mxRectangle(
+					(t.x + bgImg.x) * s, (t.y + bgImg.y) * s,
+					bgImg.width * s, bgImg.height * s));
+			}
+
 			var scale = width / bounds.width;
-			
+
 			// Limits scale to 1 or 2 * width / height
 			scale = Math.min(1, Math.min((width * 3) / (bounds.height * 4), scale));
 			
@@ -2456,6 +2469,16 @@ App.prototype.getThumbnail = function(width, fn)
 			ctx.fillRect(x0, y0, Math.ceil(bounds.width + 4), Math.ceil(bounds.height + 4));
 			ctx.restore();
 			
+			// Paints background image
+			if (bgImg != null)
+			{
+				var img = new Image();
+				img.src = bgImg.src;
+
+				ctx.drawImage(img, bgImg.x * scale, bgImg.y * scale,
+					bgImg.width * scale, bgImg.height * scale);
+			}
+			
 			var htmlCanvas = new mxJsCanvas(canvas);
 			
 			// NOTE: htmlCanvas passed into async canvas is only used for image
@@ -2469,7 +2492,7 @@ App.prototype.getThumbnail = function(width, fn)
 			
 			// Render graph
 			var imgExport = new mxImageExport();
-			
+
 			imgExport.drawShape = function(state, canvas)
 			{
 				if (state.shape instanceof mxShape && state.shape.checkBounds())
@@ -5318,7 +5341,8 @@ App.prototype.loadFile = function(id, sameWindow, file, success, force)
 							// Shows a warning if a copy was opened which happens
 							// eg. for .png files in IE as they cannot be written
 							var status = mxResources.get('copyCreated');
-							this.editor.setStatus('<div title="'+ status + '" class="geStatusAlert" style="overflow:hidden;">' + status + '</div>');
+							this.editor.setStatus('<div title="'+ status +
+								'" class="geStatusAlert">' + status + '</div>');
 						}
 						
 						if (success != null)
@@ -6232,7 +6256,7 @@ App.prototype.exportFile = function(data, filename, mimeType, base64Encoded, mod
 			{
 				// TODO: Add callback with url param for clickable status message
 				// "File exported. Click here to open folder."
-//				this.editor.setStatus('<div class="geStatusMessage" style="cursor:pointer;">' +
+//				this.editor.setStatus('<div class="geStatusMessage">' +
 //					mxResources.get('saved') + '</div>');
 //				
 //				// Installs click handler for opening
@@ -6242,6 +6266,8 @@ App.prototype.exportFile = function(data, filename, mimeType, base64Encoded, mod
 //					
 //					if (links.length > 0)
 //					{
+//						links[0].style.cursor = 'pointer';
+//
 //						mxEvent.addListener(links[0], 'click', mxUtils.bind(this, function()
 //						{
 //							if (resp != null && resp.id != null)
@@ -7583,5 +7609,8 @@ Editor.prototype.resetGraph = function()
 	editorResetGraph.apply(this, arguments);
 	
 	// Overrides default with persisted value
-	this.graph.pageFormat = mxSettings.getPageFormat();
+	if (this.graph.defaultPageFormat == null)
+	{
+		this.graph.pageFormat = mxSettings.getPageFormat();
+	}
 };

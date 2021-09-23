@@ -3824,10 +3824,23 @@ LucidImporter = {};
 	{
 		if (imgUrl && LucidImporter.imgSrcRepl != null)
 		{
-			for (var i = 0; i < LucidImporter.imgSrcRepl.length; i++)
+			var attMap = LucidImporter.imgSrcRepl.attMap;
+					
+			if (attMap[imgUrl])
 			{
-				var repl = LucidImporter.imgSrcRepl[i];
-				imgUrl = imgUrl.replace(repl.searchVal, repl.replVal);
+				imgUrl = attMap[imgUrl];
+			}
+			else
+			{
+				var imgRepl = LucidImporter.imgSrcRepl.imgRepl;
+				
+				for (var i = 0; i < imgRepl.length; i++)
+				{
+					var repl = imgRepl[i];
+					imgUrl = imgUrl.replace(repl.searchVal, repl.replVal);
+				}
+				
+				LucidImporter.hasExtImgs = true;
 			}
 		}
 	
@@ -3893,7 +3906,7 @@ LucidImporter = {};
 			return nonBlockStyles[m.n];
 		});
 		
-		//To prevent losing begining of a label when first one is not at zero (links case) 
+		//To prevent losing beginning of a label when first one is not at zero (links case) 
 		if (m[0] && m[0].s != 0)
 		{
 			m.unshift({s: 0, n: 'dummy', v: '', e: m[0].s});
@@ -4469,6 +4482,12 @@ LucidImporter = {};
 				//Convert text object to HTML if needed
 				try
 				{
+					//If there are 3+ consecutive spaces, most probably it's spaces to create a new line
+					if (/   /.test(txt))
+					{
+						LucidImporter.hasUnknownShapes = true;
+					}
+					
 					for (var i = 0; i < m.length; i++)
 					{
 						if (m[i].s > 0 || (m[i].e != null && m[i].e < txt.length) || m[i].n == 't' || m[i].n == 'ac' || m[i].n == 'lk')
@@ -5634,7 +5653,7 @@ LucidImporter = {};
 					{
 						cell.style += 'rounded=0;';
 					}
-					var isCurved = false;
+					var isCurved = p.Shape == 'curve';
 					
 					if (p.Shape != 'diagonal')
 					{
@@ -5657,10 +5676,9 @@ LucidImporter = {};
 						{
 							cell.style += 'edgeStyle=orthogonalEdgeStyle;';
 	
-							if (p.Shape == 'curve')
+							if (isCurved)
 							{
 								cell.style += 'curved=1;';
-								isCurved = true;
 							}
 						}
 					}
@@ -5724,6 +5742,12 @@ LucidImporter = {};
 							cell.geometry.points.push(new mxPoint(
 								Math.round(pt.x * scale + dx),
 								Math.round(pt.y * scale + dy)));
+						}
+						
+						if (waypoints == p.BezierJoints)
+						{
+							console.log('Curved edge case');
+							LucidImporter.hasUnknownShapes = true;
 						}
 					}
 					
@@ -5943,11 +5967,11 @@ LucidImporter = {};
 					dy = Math.abs(obj.Endpoint1.y - obj.Endpoint2.y);
 				}
 				
-				var strSize = mxUtils.getSizeForString(lblTxt);
+				var strSize = mxUtils.getSizeForString(lblTxt.replace(/\n/g, '<br>'));
 				
 				if (dx == 0 || dx < dy)
 				{
-					lab.geometry.offset = new mxPoint(-textArea.Side * (strSize.width / 2 + 5 + dx), 0);
+					lab.geometry.offset = new mxPoint(Math.sign(obj.Endpoint1.y - obj.Endpoint2.y) * textArea.Side * (strSize.width / 2 + 5 + dx), 0);
 				}
 				else
 				{
@@ -6087,8 +6111,8 @@ LucidImporter = {};
 			
 			memberCells.sort(function(a, b)
 			{
-				var ai = a.zOrder;
-				var bi = b.zOrder;
+				var ai = a.zOrder || a.ZOrder; // for edges we need ZOrder since they aren't created yet
+				var bi = b.zOrder || b.ZOrder;
 				
 				return (ai != null && bi != null) ? (ai > bi? 1 : (ai < bi? -1 : 0)) : 0; //ZOrder can be negative
 			});
@@ -6651,6 +6675,7 @@ LucidImporter = {};
 		LucidImporter.hasUnknownShapes = false;
 		LucidImporter.hasOrgChart = false;
 		LucidImporter.hasTimeLine = false;
+		LucidImporter.hasExtImgs = false;
 		var xml = ['<?xml version=\"1.0\" encoding=\"UTF-8\"?>', '<mxfile type="Lucidchart-Import" version="' +
 			EditorUi.VERSION + '" host="' + mxUtils.htmlEntities(window.location.hostname) + 
 			'" agent="' + mxUtils.htmlEntities(navigator.appVersion) + 
@@ -6891,6 +6916,11 @@ LucidImporter = {};
 	{
 		if (style != null && key != null)
 		{
+			if (key == mxConstants.STYLE_ALIGN + 'Global')
+			{
+				key = mxConstants.STYLE_ALIGN;
+			}
+			
 			if (style.includes(';' + key + '='))
 			{
 				return true;
@@ -6986,16 +7016,19 @@ LucidImporter = {};
 				
 				var brace = null;
 				var label = null;
+				var lbl = convertText(p);
+				//TODO Handle rotation of label correctly in all cases
+				var lblSize = p.Rotation? mxUtils.getSizeForString(lbl.replace(/\n/g, '<br>'), null, null, Math.abs(w - h * 0.125)) : {width: 0, height: 0};
 				
 				if (isRightBrace)
 				{
 					brace = new mxCell('', new mxGeometry(w - h * 0.125, 0,	h * 0.125, h), 'shape=curlyBracket;rounded=1;');
-					label = new mxCell('', new mxGeometry(0, 0,	w - h * 0.125, h), 'strokeColor=none;fillColor=none;');
+					label = new mxCell('', new mxGeometry(lblSize.height, -2 * lblSize.width, w - h * 0.125, h), 'strokeColor=none;fillColor=none;');
 				}
 				else
 				{
 					brace = new mxCell('', new mxGeometry(0, 0,	h * 0.125, h), 'shape=curlyBracket;rounded=1;flipH=1;');
-					label = new mxCell('', new mxGeometry(h * 0.125, 0,	w - h * 0.125, h), 'strokeColor=none;fillColor=none;');
+					label = new mxCell('', new mxGeometry(h * 0.125 - lblSize.height, lblSize.width, w - h * 0.125, h), 'strokeColor=none;fillColor=none;');
 				}
 				
 				v.style = "strokeColor=none;fillColor=none;"
@@ -7008,7 +7041,7 @@ LucidImporter = {};
 				addAllStyles(brace.style, p, a, brace);
 
 				label.vertex = true;
-				label.value = convertText(p);
+				label.value = lbl;
 				v.insert(label);
 				
 				label.style += 	
@@ -9369,6 +9402,12 @@ LucidImporter = {};
 				switch (p.bpmnDataType)
 				{
 					case 0:
+						v.value = convertText(p.Text);
+						
+						if (p.Text && !p.Text.t)
+						{
+							p.Text.t = ' '; //Such that Title is catched and added later!
+						}
 						break;
 					case 1:
 						var item1 = new mxCell('', new mxGeometry(0.5, 1, 12, 10), 'shape=parallelMarker;part=1;');
@@ -12445,6 +12484,7 @@ LucidImporter = {};
 				else
 				{
 					v.value = convertText(p.Title);
+					v.style += 'align=center;';
 					v.style += 
 						getLabelStyle(p.Title, isLastLblHTML);
 					v.style += addAllStyles(v.style, p, a, v, isLastLblHTML);
@@ -12470,7 +12510,9 @@ LucidImporter = {};
 
 				if (p.ShadedHeader)
 				{
-					v.style += 'fillColor=#e0e0e0;';
+					var st = getColor(p.FillColor);
+					var darkerClr = getDarkerClr(st, 0.85);
+					v.style += 'fillColor=' + darkerClr + ';';
 				}
 				else
 				{
@@ -13208,11 +13250,11 @@ LucidImporter = {};
 									
 									if (gTxtObj.w)
 									{
-										lblGeo.width *= gTxtObj.w;
+										lblGeo.width *= (gTxtObj.w / stencil.w);
 									}									
 									if (gTxtObj.h)
 									{
-										lblGeo.height *= gTxtObj.h;
+										lblGeo.height *= (gTxtObj.h / stencil.h);
 									}
 									if (gTxtObj.x)
 									{
@@ -13492,7 +13534,8 @@ LucidImporter = {};
 			try
 			{
 				var geo = v.geometry;
-				var title = new mxCell(convertText(p.Title), new mxGeometry(0, geo.height,geo.width, 10), 'strokeColor=none;fillColor=none;');
+				var title = new mxCell(convertText(p.Title), new mxGeometry(0, geo.height + 4,geo.width, 10), 
+								'strokeColor=none;fillColor=none;whiteSpace=wrap;verticalAlign=top;labelPosition=center;verticalLabelPosition=top;align=center;');
 				title.vertex = true;
 				v.insert(title);
 				v.style += getLabelStyle(p.Title, isLastLblHTML);
@@ -13675,17 +13718,8 @@ LucidImporter = {};
 				
 				var size = mxUtils.getSizeForString(lbl);
 				//TODO Is image always in Image/018__ImageUrl__?
-				var imgUrl = dObj['Image'] || dObj['018__ImageUrl__'] || defImg;
-				
-				if (LucidImporter.imgSrcRepl != null)
-				{
-					for (var i = 0; i < LucidImporter.imgSrcRepl.length; i++)
-					{
-						var repl = LucidImporter.imgSrcRepl[i];
-						imgUrl = imgUrl.replace(repl.searchVal, repl.replVal);
-					}
-				}
-				
+				var imgUrl = mapImgUrl(dObj['Image'] || dObj['018__ImageUrl__']) || defImg;
+								
 				var cell = new mxCell(lbl, new mxGeometry(0, 0, size.width + marginW, size.height + marginH), 
 									cellStyle + (hasImage? imgUrl : ''));
 			    cell.vertex = true;
